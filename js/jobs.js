@@ -413,6 +413,16 @@ const Jobs = (() => {
     }
   }
 
+  function highlightStage(stageKey) {
+    requestAnimationFrame(() => {
+      const col = document.querySelector(`.column[data-stage="${stageKey}"]`);
+      if (!col) return;
+      col.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      col.classList.add('column-pulse');
+      setTimeout(() => col.classList.remove('column-pulse'), 1600);
+    });
+  }
+
   function pageActions() {
     return `<button class="btn" id="new-job-btn">${UI.icon('plus')} New job</button>`;
   }
@@ -422,5 +432,5 @@ const Jobs = (() => {
     if (btn) btn.addEventListener('click', () => openForm());
   }
 
-  return { render, openForm, pageActions, attachActions };
+  return { render, openForm, highlightStage, pageActions, attachActions };
 })();

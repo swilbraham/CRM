@@ -252,7 +252,31 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s;
+  position: relative;
 }
+
+.stat:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+
+.stat:hover::after {
+  content: '→';
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.stat:active { transform: translateY(0); }
 
 .stat-label {
   font-size: 12px;
@@ -420,6 +444,16 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   background: var(--accent-soft);
   outline: 2px dashed var(--accent);
   outline-offset: -6px;
+}
+
+.column.column-pulse {
+  animation: columnPulse 1.4s ease-out;
+}
+
+@keyframes columnPulse {
+  0%   { box-shadow: 0 0 0 0 var(--accent); border-color: var(--accent); }
+  40%  { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.18); border-color: var(--accent); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); border-color: var(--border); }
 }
 
 .job-card {

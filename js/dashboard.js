@@ -34,26 +34,26 @@ const Dashboard = (() => {
     page.innerHTML = `
       ${renderFilter(companies, filter)}
       <div class="stats-grid">
-        <div class="stat">
+        <button type="button" class="stat" data-go="jobs" data-stage="booked">
           <div class="stat-label">Booked jobs</div>
           <div class="stat-value">${activeJobs}</div>
           <div class="stat-sub">scheduled and confirmed</div>
-        </div>
-        <div class="stat">
+        </button>
+        <button type="button" class="stat" data-go="jobs" data-stage="invoiced">
           <div class="stat-label">Revenue this month</div>
           <div class="stat-value">${UI.formatMoney(monthRevenue)}</div>
           <div class="stat-sub">completed + invoiced</div>
-        </div>
-        <div class="stat">
+        </button>
+        <button type="button" class="stat" data-go="jobs" data-stage="quoted">
           <div class="stat-label">Open quotes</div>
           <div class="stat-value">${quoted.length}</div>
           <div class="stat-sub">awaiting customer reply</div>
-        </div>
-        <div class="stat">
+        </button>
+        <button type="button" class="stat" data-go="jobs" data-stage="lead">
           <div class="stat-label">New leads</div>
           <div class="stat-value">${leads.length}</div>
           <div class="stat-sub">to follow up</div>
-        </div>
+        </button>
       </div>
 
       <div class="dashboard-grid">
@@ -132,6 +132,14 @@ const Dashboard = (() => {
       btn.addEventListener('click', () => {
         Store.setActiveCompanyFilter(btn.dataset.filter);
         render();
+      });
+    });
+
+    page.querySelectorAll('[data-go]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const stage = btn.dataset.stage;
+        App.go(btn.dataset.go);
+        if (stage) Jobs.highlightStage(stage);
       });
     });
 
