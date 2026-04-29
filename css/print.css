@@ -1,0 +1,10 @@
+@media print {
+  body { background: #fff; display: block; }
+  .sidebar, .topbar, .modal-footer, .no-print { display: none !important; }
+  .main { padding: 0; }
+  .page { padding: 0; }
+  .modal-root.open { position: static; background: none; padding: 0; }
+  .modal { box-shadow: none; max-width: 100%; max-height: none; border-radius: 0; }
+  .modal-header { display: none; }
+  .modal-body { padding: 0; }
+}
