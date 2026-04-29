@@ -6,16 +6,38 @@ const Store = (() => {
     customers: 'crm.customers',
     jobs: 'crm.jobs',
     settings: 'crm.settings',
+    companies: 'crm.companies',
   };
 
+  const DEFAULT_COMPANIES = [
+    {
+      id: 'wirral',
+      name: 'Wirral Carpet Cleaning Limited',
+      shortName: 'Wirral',
+      color: '#0ea5e9',
+      logo: '',
+      phone: '',
+      email: '',
+      address: '',
+      vatNumber: '',
+    },
+    {
+      id: 'freshforless',
+      name: 'Fresh For Less Carpet Cleaning',
+      shortName: 'Fresh For Less',
+      color: '#16a34a',
+      logo: '',
+      phone: '',
+      email: '',
+      address: '',
+      vatNumber: '',
+    },
+  ];
+
   const DEFAULT_SETTINGS = {
-    businessName: 'Carpet & Upholstery Cleaning',
-    businessPhone: '',
-    businessEmail: '',
-    businessAddress: '',
-    vatNumber: '',
     nextInvoiceNo: 1001,
     nextQuoteNo: 2001,
+    activeCompanyFilter: 'all',
   };
 
   function read(key, fallback) {
@@ -33,6 +55,49 @@ const Store = (() => {
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  // --- Companies ---
+  function getCompanies() {
+    let list = read(KEYS.companies, null);
+    if (!list || !Array.isArray(list) || list.length === 0) {
+      // Migrate from legacy single-business settings if present
+      const legacy = read(KEYS.settings, {});
+      if (legacy && legacy.businessName && legacy.businessName !== 'Carpet & Upholstery Cleaning') {
+        list = [{
+          id: 'legacy',
+          name: legacy.businessName,
+          shortName: legacy.businessName.split(' ')[0],
+          color: '#2563eb',
+          logo: '',
+          phone: legacy.businessPhone || '',
+          email: legacy.businessEmail || '',
+          address: legacy.businessAddress || '',
+          vatNumber: legacy.vatNumber || '',
+        }, ...DEFAULT_COMPANIES.slice(1)];
+      } else {
+        list = DEFAULT_COMPANIES.slice();
+      }
+      write(KEYS.companies, list);
+    }
+    return list;
+  }
+
+  function getCompany(id) {
+    return getCompanies().find(c => c.id === id);
+  }
+
+  function saveCompany(data) {
+    const all = getCompanies();
+    const i = all.findIndex(c => c.id === data.id);
+    if (i >= 0) {
+      all[i] = { ...all[i], ...data };
+    } else {
+      data.id = data.id || uid();
+      all.push(data);
+    }
+    write(KEYS.companies, all);
+    return all[i >= 0 ? i : all.length - 1];
   }
 
   // --- Customers ---
@@ -61,8 +126,6 @@ const Store = (() => {
 
   function deleteCustomer(id) {
     write(KEYS.customers, getCustomers().filter(c => c.id !== id));
-    // Cascade: also remove jobs for that customer? No — keep history but flag.
-    // We'll just leave jobs orphaned-by-id; the UI shows "Unknown customer".
   }
 
   // --- Jobs ---
@@ -88,6 +151,11 @@ const Store = (() => {
       data.createdAt = Date.now();
       data.updatedAt = Date.now();
       data.status = data.status || 'lead';
+      // Default to first company if not specified
+      if (!data.companyId) {
+        const companies = getCompanies();
+        data.companyId = companies[0] ? companies[0].id : '';
+      }
       all.push(data);
     }
     write(KEYS.jobs, all);
@@ -118,7 +186,7 @@ const Store = (() => {
     write(KEYS.jobs, getJobs().filter(j => j.id !== id));
   }
 
-  // --- Settings ---
+  // --- Settings (counters + active filter) ---
   function getSettings() {
     return { ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) };
   }
@@ -128,14 +196,24 @@ const Store = (() => {
     return data;
   }
 
+  function getActiveCompanyFilter() {
+    return getSettings().activeCompanyFilter || 'all';
+  }
+
+  function setActiveCompanyFilter(id) {
+    const s = getSettings();
+    saveSettings({ ...s, activeCompanyFilter: id });
+  }
+
   // --- Export / import ---
   function exportAll() {
     return {
       customers: getCustomers(),
       jobs: getJobs(),
       settings: getSettings(),
+      companies: getCompanies(),
       exportedAt: new Date().toISOString(),
-      version: 1,
+      version: 2,
     };
   }
 
@@ -143,20 +221,47 @@ const Store = (() => {
     if (!payload || typeof payload !== 'object') throw new Error('Invalid file');
     if (Array.isArray(payload.customers)) write(KEYS.customers, payload.customers);
     if (Array.isArray(payload.jobs)) write(KEYS.jobs, payload.jobs);
+    if (Array.isArray(payload.companies)) write(KEYS.companies, payload.companies);
     if (payload.settings) write(KEYS.settings, payload.settings);
+  }
+
+  // Backfill companyId on jobs that pre-date multi-company support
+  function migrateJobs() {
+    const jobs = getJobs();
+    const companies = getCompanies();
+    if (companies.length === 0) return;
+    const defaultId = companies[0].id;
+    const fflId = companies.find(c => c.id === 'freshforless')?.id;
+    let changed = false;
+    jobs.forEach((j, idx) => {
+      if (!j.companyId) {
+        // Spread legacy seed data across both companies for a useful demo
+        j.companyId = (fflId && idx % 2 === 1) ? fflId : defaultId;
+        changed = true;
+      }
+    });
+    if (changed) write(KEYS.jobs, jobs);
   }
 
   // --- Seed sample data on first run ---
   function seedIfEmpty() {
+    // Always ensure default companies exist
+    getCompanies();
+    migrateJobs();
+
     if (getCustomers().length > 0 || getJobs().length > 0) return;
+
+    const companies = getCompanies();
+    const wirralId = companies[0].id;
+    const fflId = companies[1] ? companies[1].id : wirralId;
 
     const c1 = saveCustomer({
       name: 'Margaret Thompson',
       phone: '07700 900123',
       email: 'mthompson@example.co.uk',
       address: '14 Elm Avenue',
-      city: 'Reading',
-      postcode: 'RG1 5AB',
+      city: 'Birkenhead',
+      postcode: 'CH41 5AB',
       notes: 'Two cats — please use pet-safe products. Side gate code: 4827.',
     });
 
@@ -165,8 +270,8 @@ const Store = (() => {
       phone: '07700 900456',
       email: 'james.patel@example.com',
       address: '22 Oakwood Drive',
-      city: 'Wokingham',
-      postcode: 'RG40 2XY',
+      city: 'Wallasey',
+      postcode: 'CH44 2XY',
       notes: 'Wool carpets in lounge — no harsh chemicals.',
     });
 
@@ -175,8 +280,8 @@ const Store = (() => {
       phone: '07700 900789',
       email: '',
       address: '8 Riverside Court',
-      city: 'Reading',
-      postcode: 'RG2 9PL',
+      city: 'Heswall',
+      postcode: 'CH60 9PL',
       notes: '',
     });
 
@@ -186,6 +291,7 @@ const Store = (() => {
 
     saveJob({
       customerId: c1.id,
+      companyId: wirralId,
       status: 'booked',
       date: future(3),
       time: '09:30',
@@ -199,6 +305,7 @@ const Store = (() => {
 
     saveJob({
       customerId: c2.id,
+      companyId: fflId,
       status: 'quoted',
       date: future(7),
       time: '14:00',
@@ -211,6 +318,7 @@ const Store = (() => {
 
     saveJob({
       customerId: c3.id,
+      companyId: fflId,
       status: 'lead',
       date: '',
       time: '',
@@ -222,6 +330,7 @@ const Store = (() => {
 
     saveJob({
       customerId: c1.id,
+      companyId: wirralId,
       status: 'completed',
       date: future(-14),
       time: '10:00',
@@ -233,6 +342,7 @@ const Store = (() => {
 
     saveJob({
       customerId: c2.id,
+      companyId: wirralId,
       status: 'invoiced',
       date: future(-21),
       time: '11:00',
@@ -245,9 +355,11 @@ const Store = (() => {
   }
 
   return {
+    getCompanies, getCompany, saveCompany,
     getCustomers, getCustomer, saveCustomer, deleteCustomer,
     getJobs, getJob, getJobsForCustomer, saveJob, updateJobStatus, deleteJob,
     getSettings, saveSettings,
+    getActiveCompanyFilter, setActiveCompanyFilter,
     exportAll, importAll,
     seedIfEmpty, uid,
   };

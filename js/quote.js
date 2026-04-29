@@ -1,19 +1,23 @@
-// Printable quote / invoice view, generated from a job.
+// Printable quote / invoice — uses the job's company for branding.
 
 const Quote = (() => {
   function open(jobId) {
     const job = Store.getJob(jobId);
     if (!job) return;
     const customer = Store.getCustomer(job.customerId);
-    const settings = Store.getSettings();
+    const company = Store.getCompany(job.companyId) || Store.getCompanies()[0];
+
+    if (!company) {
+      UI.toast('No company set up — visit Companies first');
+      return;
+    }
 
     const isInvoice = job.status === 'invoiced';
-    const docNumber = isInvoice
-      ? (job.invoiceNo || '—')
-      : (job.quoteNo || '—');
+    const docNumber = isInvoice ? (job.invoiceNo || '—') : (job.quoteNo || '—');
     const docTitle = isInvoice ? 'Invoice' : 'Quote';
     const dateLabel = isInvoice ? 'Invoice date' : 'Quote date';
     const total = UI.jobTotal(job);
+    const accent = company.color || '#2563eb';
 
     const customerLines = customer ? [
       `<strong>${UI.escapeHtml(customer.name)}</strong>`,
@@ -24,24 +28,31 @@ const Quote = (() => {
     ].filter(Boolean).join('<br/>') : 'Unknown customer';
 
     const businessLines = [
-      `<strong>${UI.escapeHtml(settings.businessName)}</strong>`,
-      UI.escapeHtml(settings.businessAddress || ''),
-      settings.businessPhone ? UI.escapeHtml(settings.businessPhone) : '',
-      settings.businessEmail ? UI.escapeHtml(settings.businessEmail) : '',
-      settings.vatNumber ? `VAT: ${UI.escapeHtml(settings.vatNumber)}` : '',
+      `<strong>${UI.escapeHtml(company.name)}</strong>`,
+      UI.escapeHtml(company.address || '').replace(/\n/g, '<br/>'),
+      company.phone ? UI.escapeHtml(company.phone) : '',
+      company.email ? UI.escapeHtml(company.email) : '',
+      company.vatNumber ? `VAT: ${UI.escapeHtml(company.vatNumber)}` : '',
     ].filter(Boolean).join('<br/>');
+
+    const logoBlock = company.logo
+      ? `<img src="${UI.escapeHtml(company.logo)}" alt="${UI.escapeHtml(company.name)} logo" class="quote-logo" />`
+      : `<div class="quote-logo-placeholder" style="background:${accent}1a;color:${accent};">${UI.escapeHtml((company.shortName || company.name).slice(0, 2).toUpperCase())}</div>`;
 
     UI.openModal(`
       <div class="modal-header no-print">
-        <h2>${docTitle} preview</h2>
+        <h2>${docTitle} preview · ${UI.escapeHtml(company.shortName || company.name)}</h2>
         <button class="modal-close" data-close>${UI.icon('close')}</button>
       </div>
       <div class="modal-body">
-        <div class="quote-doc" id="quote-doc">
+        <div class="quote-doc" id="quote-doc" style="--quote-accent:${accent};">
           <div class="quote-head">
-            <div>
-              <h1>${docTitle}</h1>
-              <div class="text-muted" style="font-size: 13px;">#${UI.escapeHtml(String(docNumber))}</div>
+            <div class="quote-head-left">
+              ${logoBlock}
+              <div>
+                <h1>${docTitle}</h1>
+                <div class="text-muted" style="font-size: 13px;">#${UI.escapeHtml(String(docNumber))}</div>
+              </div>
             </div>
             <div class="quote-meta">
               ${businessLines}
@@ -106,71 +117,17 @@ const Quote = (() => {
       </div>
       <div class="modal-footer no-print">
         <button type="button" class="btn btn-secondary" data-close>Close</button>
-        <button type="button" class="btn btn-secondary" id="settings-btn">Business details</button>
+        <button type="button" class="btn btn-secondary" id="edit-company-btn">Edit company details</button>
         <button type="button" class="btn" id="print-btn">${UI.icon('print')} Print / save PDF</button>
       </div>
     `, { wide: true });
 
     document.getElementById('print-btn').addEventListener('click', () => window.print());
-    document.getElementById('settings-btn').addEventListener('click', openSettings);
-  }
-
-  function openSettings() {
-    const s = Store.getSettings();
-    UI.openModal(`
-      <div class="modal-header">
-        <h2>Business details</h2>
-        <button class="modal-close" data-close>${UI.icon('close')}</button>
-      </div>
-      <form id="settings-form">
-        <div class="modal-body">
-          <p class="text-muted mb-3" style="font-size: 13px;">These appear on quotes and invoices.</p>
-          <div class="field">
-            <label class="label">Business name</label>
-            <input class="input" name="businessName" value="${UI.escapeHtml(s.businessName)}" />
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label class="label">Phone</label>
-              <input class="input" name="businessPhone" value="${UI.escapeHtml(s.businessPhone)}" />
-            </div>
-            <div class="field">
-              <label class="label">Email</label>
-              <input class="input" type="email" name="businessEmail" value="${UI.escapeHtml(s.businessEmail)}" />
-            </div>
-          </div>
-          <div class="field">
-            <label class="label">Address</label>
-            <textarea class="textarea" name="businessAddress">${UI.escapeHtml(s.businessAddress)}</textarea>
-          </div>
-          <div class="field">
-            <label class="label">VAT number (optional)</label>
-            <input class="input" name="vatNumber" value="${UI.escapeHtml(s.vatNumber)}" />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-close>Cancel</button>
-          <button type="submit" class="btn">Save</button>
-        </div>
-      </form>
-    `);
-
-    document.getElementById('settings-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const current = Store.getSettings();
-      Store.saveSettings({
-        ...current,
-        businessName: fd.get('businessName').trim() || 'Carpet & Upholstery Cleaning',
-        businessPhone: fd.get('businessPhone').trim(),
-        businessEmail: fd.get('businessEmail').trim(),
-        businessAddress: fd.get('businessAddress').trim(),
-        vatNumber: fd.get('vatNumber').trim(),
-      });
+    document.getElementById('edit-company-btn').addEventListener('click', () => {
       UI.closeModal();
-      UI.toast('Business details saved');
+      Companies.openEdit(company.id);
     });
   }
 
-  return { open, openSettings };
+  return { open };
 })();

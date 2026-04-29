@@ -1,12 +1,16 @@
-// Jobs page: 5-column kanban board with drag-and-drop between stages.
-// Click a card to edit; "+ New job" opens the same form blank.
+// Jobs page: 5-column kanban with drag-and-drop + per-company filter pills.
 
 const Jobs = (() => {
   function render() {
     const page = document.getElementById('page-jobs');
-    const jobs = Store.getJobs();
+    const allJobs = Store.getJobs();
     const customers = Store.getCustomers();
+    const companies = Store.getCompanies();
     const customerById = Object.fromEntries(customers.map(c => [c.id, c]));
+    const companyById = Object.fromEntries(companies.map(c => [c.id, c]));
+
+    const filter = Store.getActiveCompanyFilter();
+    const jobs = filter === 'all' ? allJobs : allJobs.filter(j => j.companyId === filter);
 
     const byStage = {};
     UI.STAGES.forEach(s => { byStage[s.key] = []; });
@@ -14,7 +18,6 @@ const Jobs = (() => {
       const key = byStage[j.status] ? j.status : 'lead';
       byStage[key].push(j);
     });
-    // Sort each column by date (soonest first), undated last
     Object.values(byStage).forEach(list => {
       list.sort((a, b) => {
         if (!a.date && !b.date) return b.updatedAt - a.updatedAt;
@@ -25,6 +28,7 @@ const Jobs = (() => {
     });
 
     page.innerHTML = `
+      ${renderFilter(companies, filter, allJobs)}
       <div class="kanban">
         ${UI.STAGES.map(s => `
           <div class="column" data-stage="${s.key}">
@@ -36,27 +40,57 @@ const Jobs = (() => {
               <span class="column-count">${byStage[s.key].length}</span>
             </div>
             <div class="column-body" data-drop="${s.key}">
-              ${byStage[s.key].map(j => renderCard(j, customerById[j.customerId])).join('')}
+              ${byStage[s.key].map(j => renderCard(j, customerById[j.customerId], companyById[j.companyId])).join('')}
             </div>
           </div>
         `).join('')}
       </div>
     `;
 
+    wireFilter();
     wireDragAndDrop();
     wireCardClicks();
   }
 
-  function renderCard(job, customer) {
+  function renderFilter(companies, active, allJobs) {
+    const counts = { all: allJobs.length };
+    companies.forEach(c => { counts[c.id] = allJobs.filter(j => j.companyId === c.id).length; });
+    return `
+      <div class="filter-pills">
+        <button class="pill ${active === 'all' ? 'active' : ''}" data-filter="all">
+          All <span class="pill-count">${counts.all}</span>
+        </button>
+        ${companies.map(c => `
+          <button class="pill ${active === c.id ? 'active' : ''}" data-filter="${c.id}" style="${active === c.id ? `--pill-accent:${c.color};` : ''}">
+            <span class="company-dot" style="background:${c.color}"></span>
+            ${UI.escapeHtml(c.shortName || c.name)}
+            <span class="pill-count">${counts[c.id] || 0}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function wireFilter() {
+    document.querySelectorAll('.pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Store.setActiveCompanyFilter(btn.dataset.filter);
+        render();
+      });
+    });
+  }
+
+  function renderCard(job, customer, company) {
     const name = customer ? customer.name : 'Unknown customer';
-    const summary = job.items
-      .map(i => i.description)
-      .filter(Boolean)
-      .join(' · ') || '(No items)';
+    const summary = job.items.map(i => i.description).filter(Boolean).join(' · ') || '(No items)';
     const total = UI.jobTotal(job);
     const dateLabel = job.date ? UI.formatDateShort(job.date) : 'Unscheduled';
+    const companyTag = company
+      ? `<span class="company-tag" style="background:${company.color}1a;color:${company.color}"><span class="company-dot" style="background:${company.color}"></span>${UI.escapeHtml(company.shortName || company.name)}</span>`
+      : '';
     return `
       <div class="job-card" draggable="true" data-job-id="${job.id}">
+        ${companyTag}
         <div class="job-card-title">${UI.escapeHtml(name)}</div>
         <div class="job-card-sub">${UI.escapeHtml(summary)}</div>
         <div class="job-card-meta">
@@ -68,18 +102,14 @@ const Jobs = (() => {
   }
 
   function wireDragAndDrop() {
-    let dragging = null;
-
     document.querySelectorAll('.job-card').forEach(card => {
       card.addEventListener('dragstart', (e) => {
-        dragging = card;
         card.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', card.dataset.jobId);
       });
       card.addEventListener('dragend', () => {
         card.classList.remove('dragging');
-        dragging = null;
         document.querySelectorAll('.column-body.drag-over').forEach(c => c.classList.remove('drag-over'));
       });
     });
@@ -91,7 +121,6 @@ const Jobs = (() => {
         zone.classList.add('drag-over');
       });
       zone.addEventListener('dragleave', (e) => {
-        // Only clear when actually leaving the zone (not entering a child)
         if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
       });
       zone.addEventListener('drop', (e) => {
@@ -110,11 +139,8 @@ const Jobs = (() => {
 
   function wireCardClicks() {
     document.querySelectorAll('.job-card').forEach(card => {
-      // Use mouseup so click doesn't fire after a drag.
       let downX = 0, downY = 0, moved = false;
-      card.addEventListener('mousedown', (e) => {
-        downX = e.clientX; downY = e.clientY; moved = false;
-      });
+      card.addEventListener('mousedown', (e) => { downX = e.clientX; downY = e.clientY; moved = false; });
       card.addEventListener('mousemove', (e) => {
         if (Math.abs(e.clientX - downX) > 5 || Math.abs(e.clientY - downY) > 5) moved = true;
       });
@@ -126,18 +152,22 @@ const Jobs = (() => {
     });
   }
 
-  // ---- Job form (used for new + edit) ----
-
   function openForm(job = null) {
     const isEdit = !!(job && job.id);
     const j = job || {};
     const customers = Store.getCustomers();
+    const companies = Store.getCompanies();
 
     if (customers.length === 0) {
       UI.toast('Add a customer first');
       Customers.openForm();
       return;
     }
+
+    // Default company: existing job's, or current filter, or first company
+    const currentFilter = Store.getActiveCompanyFilter();
+    const defaultCompanyId = j.companyId
+      || (currentFilter !== 'all' ? currentFilter : (companies[0] ? companies[0].id : ''));
 
     const items = (j.items && j.items.length) ? j.items.slice() : [{ description: '', qty: 1, price: 0 }];
 
@@ -148,6 +178,20 @@ const Jobs = (() => {
       </div>
       <form id="job-form">
         <div class="modal-body">
+          <div class="field">
+            <label class="label">Company *</label>
+            <div class="company-picker">
+              ${companies.map(c => `
+                <label class="company-option">
+                  <input type="radio" name="companyId" value="${c.id}" ${c.id === defaultCompanyId ? 'checked' : ''} required />
+                  <span class="company-option-body">
+                    <span class="company-dot" style="background:${c.color}"></span>
+                    <span>${UI.escapeHtml(c.name)}</span>
+                  </span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
           <div class="field-row">
             <div class="field">
               <label class="label">Customer *</label>
@@ -221,7 +265,6 @@ const Jobs = (() => {
           <td><button type="button" class="row-remove" data-remove="${idx}">${UI.icon('trash')}</button></td>
         </tr>
       `).join('');
-
       tbody.querySelectorAll('input').forEach(input => {
         input.addEventListener('input', (e) => {
           const tr = e.target.closest('tr');
@@ -267,19 +310,18 @@ const Jobs = (() => {
       const payload = {
         ...(isEdit ? { id: j.id } : {}),
         customerId: fd.get('customerId'),
+        companyId: fd.get('companyId'),
         status: newStatus,
         date: fd.get('date'),
         time: fd.get('time'),
         notes: fd.get('notes').trim(),
         items: cleanItems,
       };
-      // Preserve invoice/quote numbers if already assigned
       if (isEdit) {
         if (j.invoiceNo) payload.invoiceNo = j.invoiceNo;
         if (j.quoteNo) payload.quoteNo = j.quoteNo;
       }
       const saved = Store.saveJob(payload);
-      // If status changed to quoted/invoiced for the first time, assign a number
       if ((newStatus === 'quoted' && !saved.quoteNo) || (newStatus === 'invoiced' && !saved.invoiceNo)) {
         Store.updateJobStatus(saved.id, newStatus);
       }

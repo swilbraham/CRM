@@ -3,9 +3,14 @@
 const Dashboard = (() => {
   function render() {
     const page = document.getElementById('page-dashboard');
-    const jobs = Store.getJobs();
+    const allJobs = Store.getJobs();
     const customers = Store.getCustomers();
+    const companies = Store.getCompanies();
     const customerById = Object.fromEntries(customers.map(c => [c.id, c]));
+    const companyById = Object.fromEntries(companies.map(c => [c.id, c]));
+
+    const filter = Store.getActiveCompanyFilter();
+    const jobs = filter === 'all' ? allJobs : allJobs.filter(j => j.companyId === filter);
 
     const today = UI.todayISO();
     const in7 = new Date(); in7.setDate(in7.getDate() + 7);
@@ -18,7 +23,6 @@ const Dashboard = (() => {
     const leads = jobs.filter(j => j.status === 'lead');
     const quoted = jobs.filter(j => j.status === 'quoted');
 
-    // Revenue this month: sum of completed/invoiced jobs whose date is this month
     const now = new Date();
     const monthPrefix = now.toISOString().slice(0, 7);
     const monthRevenue = jobs
@@ -28,6 +32,7 @@ const Dashboard = (() => {
     const activeJobs = jobs.filter(j => j.status === 'booked').length;
 
     page.innerHTML = `
+      ${renderFilter(companies, filter)}
       <div class="stats-grid">
         <div class="stat">
           <div class="stat-label">Booked jobs</div>
@@ -65,6 +70,7 @@ const Dashboard = (() => {
                   <tr>
                     <th>Date</th>
                     <th>Customer</th>
+                    <th>Company</th>
                     <th>Service</th>
                     <th>Status</th>
                     <th class="text-right">Total</th>
@@ -73,10 +79,12 @@ const Dashboard = (() => {
                 <tbody>
                   ${upcoming.map(j => {
                     const c = customerById[j.customerId];
+                    const co = companyById[j.companyId];
                     return `
                       <tr data-job-id="${j.id}">
                         <td><strong>${UI.formatDateShort(j.date)}</strong>${j.time ? ' · ' + UI.escapeHtml(j.time) : ''}</td>
                         <td>${UI.escapeHtml(c ? c.name : 'Unknown')}</td>
+                        <td>${co ? `<span class="company-tag" style="background:${co.color}1a;color:${co.color}"><span class="company-dot" style="background:${co.color}"></span>${UI.escapeHtml(co.shortName || co.name)}</span>` : '<span class="text-muted">—</span>'}</td>
                         <td>${UI.escapeHtml(j.items.map(i => i.description).filter(Boolean).join(', ') || '—')}</td>
                         <td>${UI.badge(j.status)}</td>
                         <td class="text-right"><strong>${UI.formatMoney(UI.jobTotal(j))}</strong></td>
@@ -120,12 +128,33 @@ const Dashboard = (() => {
       </div>
     `;
 
+    page.querySelectorAll('.pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        Store.setActiveCompanyFilter(btn.dataset.filter);
+        render();
+      });
+    });
+
     page.querySelectorAll('[data-job-id]').forEach(row => {
       row.addEventListener('click', () => {
         const j = Store.getJob(row.dataset.jobId);
         if (j) Jobs.openForm(j);
       });
     });
+  }
+
+  function renderFilter(companies, active) {
+    return `
+      <div class="filter-pills">
+        <button class="pill ${active === 'all' ? 'active' : ''}" data-filter="all">All companies</button>
+        ${companies.map(c => `
+          <button class="pill ${active === c.id ? 'active' : ''}" data-filter="${c.id}">
+            <span class="company-dot" style="background:${c.color}"></span>
+            ${UI.escapeHtml(c.shortName || c.name)}
+          </button>
+        `).join('')}
+      </div>
+    `;
   }
 
   function pageActions() {

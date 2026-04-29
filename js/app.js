@@ -6,6 +6,7 @@ const App = (() => {
     customers: { title: 'Customers', module: () => Customers },
     jobs:      { title: 'Jobs',      module: () => Jobs },
     calendar:  { title: 'Calendar',  module: () => Calendar },
+    companies: { title: 'Companies', module: () => Companies },
   };
 
   let current = 'dashboard';
