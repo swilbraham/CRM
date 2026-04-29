@@ -195,7 +195,7 @@ const Jobs = (() => {
           <div class="field-row">
             <div class="field">
               <label class="label">Customer *</label>
-              <select class="select" name="customerId" required>
+              <select class="select" name="customerId" id="customer-select" required>
                 <option value="">— Choose a customer —</option>
                 ${customers.map(c => `
                   <option value="${c.id}" ${c.id === j.customerId ? 'selected' : ''}>${UI.escapeHtml(c.name)}${c.postcode ? ' · ' + UI.escapeHtml(c.postcode) : ''}</option>
@@ -211,6 +211,8 @@ const Jobs = (() => {
               </select>
             </div>
           </div>
+
+          <div id="customer-history"></div>
           <div class="field-row">
             <div class="field">
               <label class="label">Date</label>
@@ -254,6 +256,72 @@ const Jobs = (() => {
         </div>
       </form>
     `, { wide: true });
+
+    const historyPanel = document.getElementById('customer-history');
+    const customerSelect = document.getElementById('customer-select');
+    const companyById = Object.fromEntries(Store.getCompanies().map(c => [c.id, c]));
+
+    function renderHistory(customerId) {
+      if (!customerId) { historyPanel.innerHTML = ''; return; }
+      const past = Store.getJobsForCustomer(customerId)
+        .filter(pj => pj.id !== j.id)
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      if (past.length === 0) {
+        historyPanel.innerHTML = `
+          <div class="history-panel">
+            <div class="history-head">
+              <span>Previous jobs for this customer</span>
+              <span class="text-muted">none yet</span>
+            </div>
+            <p class="text-muted" style="font-size:12px;padding:10px 14px;">First job for this customer.</p>
+          </div>
+        `;
+        return;
+      }
+      const quotedCount = past.filter(p => p.status === 'quoted').length;
+      historyPanel.innerHTML = `
+        <div class="history-panel">
+          <div class="history-head">
+            <span>Previous jobs for this customer</span>
+            <span class="text-muted">${past.length} total${quotedCount ? ` · ${quotedCount} open quote${quotedCount > 1 ? 's' : ''}` : ''}</span>
+          </div>
+          <div class="history-list">
+            ${past.map(pj => {
+              const co = companyById[pj.companyId];
+              const summary = pj.items.map(i => i.description).filter(Boolean).join(', ') || '(no items)';
+              return `
+                <div class="history-item" data-history-id="${pj.id}" title="Click to view document">
+                  <div class="history-item-main">
+                    <div class="history-item-top">
+                      ${UI.badge(pj.status)}
+                      ${co ? `<span class="company-tag" style="background:${co.color}1a;color:${co.color};margin:0;"><span class="company-dot" style="background:${co.color}"></span>${UI.escapeHtml(co.shortName || co.name)}</span>` : ''}
+                      <span class="text-muted" style="font-size:12px;">${pj.date ? UI.formatDate(pj.date) : 'Unscheduled'}</span>
+                    </div>
+                    <div class="history-item-summary">${UI.escapeHtml(summary)}</div>
+                  </div>
+                  <div class="history-item-side">
+                    <strong>${UI.formatMoney(UI.jobTotal(pj))}</strong>
+                    ${(pj.status === 'quoted' || pj.status === 'invoiced')
+                      ? `<button type="button" class="btn-icon history-view" data-view="${pj.id}" title="View ${pj.status === 'invoiced' ? 'invoice' : 'quote'}">${UI.icon('doc')}</button>`
+                      : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+      historyPanel.querySelectorAll('.history-view').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          UI.closeModal();
+          Quote.open(btn.dataset.view);
+        });
+      });
+    }
+
+    customerSelect.addEventListener('change', (e) => renderHistory(e.target.value));
+    renderHistory(customerSelect.value);
 
     const tbody = document.getElementById('items-body');
     function renderItems() {

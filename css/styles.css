@@ -909,6 +909,76 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: var(--text-muted);
 }
 
+/* ===== Customer history panel (in job form) ===== */
+.history-panel {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.history-list { max-height: 200px; overflow-y: auto; }
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.history-item:last-child { border-bottom: none; }
+.history-item:hover { background: var(--panel); }
+
+.history-item-main { flex: 1; min-width: 0; }
+
+.history-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.history-item-summary {
+  color: var(--text-soft);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-item-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.history-item-side strong {
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+}
+
+.history-view { padding: 6px; }
+
 /* ===== Filter pills ===== */
 .filter-pills {
   display: flex;
