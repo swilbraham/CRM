@@ -195,12 +195,16 @@ const Jobs = (() => {
           <div class="field-row">
             <div class="field">
               <label class="label">Customer *</label>
-              <select class="select" name="customerId" id="customer-select" required>
-                <option value="">— Choose a customer —</option>
-                ${customers.map(c => `
-                  <option value="${c.id}" ${c.id === j.customerId ? 'selected' : ''}>${UI.escapeHtml(c.name)}${c.postcode ? ' · ' + UI.escapeHtml(c.postcode) : ''}</option>
-                `).join('')}
-              </select>
+              <div class="customer-row">
+                <select class="select" name="customerId" id="customer-select" required>
+                  <option value="">— Choose a customer —</option>
+                  ${customers.map(c => `
+                    <option value="${c.id}" ${c.id === j.customerId ? 'selected' : ''}>${UI.escapeHtml(c.name)}${c.postcode ? ' · ' + UI.escapeHtml(c.postcode) : ''}</option>
+                  `).join('')}
+                </select>
+                <button type="button" class="btn-icon" id="customer-add" title="Add new customer">${UI.icon('plus')}</button>
+                <button type="button" class="btn-icon" id="customer-edit" title="Edit selected customer" disabled>${UI.icon('edit')}</button>
+              </div>
             </div>
             <div class="field">
               <label class="label">Stage</label>
@@ -320,8 +324,60 @@ const Jobs = (() => {
       });
     }
 
-    customerSelect.addEventListener('change', (e) => renderHistory(e.target.value));
+    const editBtn = document.getElementById('customer-edit');
+    const addBtn = document.getElementById('customer-add');
+
+    function refreshEditButton() {
+      editBtn.disabled = !customerSelect.value;
+    }
+
+    function captureDraft() {
+      const fd = new FormData(document.getElementById('job-form'));
+      return {
+        ...(isEdit ? { id: j.id, invoiceNo: j.invoiceNo, quoteNo: j.quoteNo, createdAt: j.createdAt } : {}),
+        customerId: fd.get('customerId'),
+        companyId: fd.get('companyId'),
+        status: fd.get('status'),
+        date: fd.get('date'),
+        time: fd.get('time'),
+        notes: fd.get('notes'),
+        items: items.slice(),
+      };
+    }
+
+    function reopenWithCustomer(draft, customerId) {
+      const merged = { ...draft, customerId };
+      UI.closeModal();
+      openForm(merged);
+    }
+
+    addBtn.addEventListener('click', () => {
+      const draft = captureDraft();
+      UI.closeModal();
+      Customers.openForm(null, {
+        onSave: (newCustomer) => reopenWithCustomer(draft, newCustomer ? newCustomer.id : draft.customerId),
+        onCancel: () => openForm(draft),
+      });
+    });
+
+    editBtn.addEventListener('click', () => {
+      const cid = customerSelect.value;
+      if (!cid) return;
+      const customer = Store.getCustomer(cid);
+      const draft = captureDraft();
+      UI.closeModal();
+      Customers.openForm(customer, {
+        onSave: (saved) => reopenWithCustomer(draft, saved ? saved.id : ''),
+        onCancel: () => openForm(draft),
+      });
+    });
+
+    customerSelect.addEventListener('change', (e) => {
+      renderHistory(e.target.value);
+      refreshEditButton();
+    });
     renderHistory(customerSelect.value);
+    refreshEditButton();
 
     const tbody = document.getElementById('items-body');
     function renderItems() {

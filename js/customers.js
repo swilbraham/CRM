@@ -92,9 +92,11 @@ const Customers = (() => {
     `;
   }
 
-  function openForm(customer = null) {
+  function openForm(customer = null, options = {}) {
     const c = customer || {};
     const isEdit = !!customer;
+    const onSave = options.onSave || null;
+    const onCancel = options.onCancel || null;
     UI.openModal(`
       <div class="modal-header">
         <h2>${isEdit ? 'Edit customer' : 'New customer'}</h2>
@@ -157,11 +159,21 @@ const Customers = (() => {
         postcode: fd.get('postcode').trim(),
         notes: fd.get('notes').trim(),
       };
-      Store.saveCustomer(payload);
+      const saved = Store.saveCustomer(payload);
       UI.closeModal();
       UI.toast(isEdit ? 'Customer updated' : 'Customer added');
-      render();
+      if (onSave) {
+        onSave(saved);
+      } else {
+        render();
+      }
     });
+
+    if (onCancel) {
+      document.querySelectorAll('[data-close]').forEach(b => {
+        b.addEventListener('click', onCancel);
+      });
+    }
 
     if (isEdit) {
       document.getElementById('delete-customer').addEventListener('click', () => {
@@ -169,7 +181,7 @@ const Customers = (() => {
           Store.deleteCustomer(c.id);
           UI.closeModal();
           UI.toast('Customer deleted');
-          render();
+          if (onSave) onSave(null); else render();
         }
       });
     }
