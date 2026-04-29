@@ -56,7 +56,7 @@ const Calendar = (() => {
                 ${dayJobs.map(j => {
                   const c = customerById[j.customerId];
                   const name = c ? c.name.split(' ')[0] : '?';
-                  return `<div class="cal-event" data-job-id="${j.id}" title="${UI.escapeHtml((c ? c.name : 'Unknown') + ' · ' + j.items.map(i => i.description).join(', '))}">${j.time ? UI.escapeHtml(j.time) + ' ' : ''}${UI.escapeHtml(name)}</div>`;
+                  return `<div class="cal-event" data-job-id="${j.id}" title="${UI.escapeHtml((c ? c.name : 'Unknown') + ' · ' + j.items.map(i => i.description).join(', '))}">${UI.escapeHtml(name)}</div>`;
                 }).join('')}
               </div>
             `;

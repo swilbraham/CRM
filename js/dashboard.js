@@ -82,7 +82,7 @@ const Dashboard = (() => {
                     const co = companyById[j.companyId];
                     return `
                       <tr data-job-id="${j.id}">
-                        <td><strong>${UI.formatDateShort(j.date)}</strong>${j.time ? ' · ' + UI.escapeHtml(j.time) : ''}</td>
+                        <td><strong>${UI.formatDateShort(j.date)}</strong></td>
                         <td>${UI.escapeHtml(c ? c.name : 'Unknown')}</td>
                         <td>${co ? `<span class="company-tag" style="background:${co.color}1a;color:${co.color}"><span class="company-dot" style="background:${co.color}"></span>${UI.escapeHtml(co.shortName || co.name)}</span>` : '<span class="text-muted">—</span>'}</td>
                         <td>${UI.escapeHtml(j.items.map(i => i.description).filter(Boolean).join(', ') || '—')}</td>

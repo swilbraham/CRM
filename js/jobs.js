@@ -94,7 +94,7 @@ const Jobs = (() => {
         <div class="job-card-title">${UI.escapeHtml(name)}</div>
         <div class="job-card-sub">${UI.escapeHtml(summary)}</div>
         <div class="job-card-meta">
-          <span class="job-card-date">${UI.escapeHtml(dateLabel)}${job.time ? ' · ' + UI.escapeHtml(job.time) : ''}</span>
+          <span class="job-card-date">${UI.escapeHtml(dateLabel)}</span>
           <span class="job-card-price">${UI.formatMoney(total)}</span>
         </div>
       </div>
@@ -217,15 +217,9 @@ const Jobs = (() => {
           </div>
 
           <div id="customer-history"></div>
-          <div class="field-row">
-            <div class="field">
-              <label class="label">Date</label>
-              <input class="input" type="date" name="date" value="${UI.escapeHtml(j.date || '')}" />
-            </div>
-            <div class="field">
-              <label class="label">Time</label>
-              <input class="input" type="time" name="time" value="${UI.escapeHtml(j.time || '')}" />
-            </div>
+          <div class="field">
+            <label class="label">Date</label>
+            <input class="input" type="date" name="date" value="${UI.escapeHtml(j.date || '')}" />
           </div>
 
           <label class="label" style="margin-top: 8px;">Line items</label>
@@ -339,7 +333,6 @@ const Jobs = (() => {
         companyId: fd.get('companyId'),
         status: fd.get('status'),
         date: fd.get('date'),
-        time: fd.get('time'),
         notes: fd.get('notes'),
         items: items.slice(),
       };
@@ -437,7 +430,6 @@ const Jobs = (() => {
         companyId: fd.get('companyId'),
         status: newStatus,
         date: fd.get('date'),
-        time: fd.get('time'),
         notes: fd.get('notes').trim(),
         items: cleanItems,
       };

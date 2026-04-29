@@ -67,7 +67,6 @@ const Quote = (() => {
             <div class="quote-party">
               <h3>${dateLabel}</h3>
               <p><strong>${UI.formatDate(job.date || new Date().toISOString().slice(0, 10))}</strong></p>
-              ${job.time ? `<p>Service time: ${UI.escapeHtml(job.time)}</p>` : ''}
             </div>
           </div>
 
