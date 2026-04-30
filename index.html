@@ -48,6 +48,10 @@
       <button class="ghost-btn" id="import-btn" title="Import data">Import</button>
       <input type="file" id="import-file" accept="application/json" hidden />
     </div>
+    <div class="sidebar-foot" style="border-top:none;padding-top:0;">
+      <button class="ghost-btn" id="signout-btn" style="flex:1;" title="Sign out">Sign out</button>
+    </div>
+    <div id="user-email" class="user-email"></div>
   </aside>
 
   <main class="main">
@@ -66,14 +70,18 @@
   <div class="modal-root" id="modal-root"></div>
   <div class="toast-root" id="toast-root"></div>
 
-  <script src="js/storage.js?v=7"></script>
-  <script src="js/ui.js?v=7"></script>
-  <script src="js/customers.js?v=7"></script>
-  <script src="js/jobs.js?v=7"></script>
-  <script src="js/calendar.js?v=7"></script>
-  <script src="js/companies.js?v=7"></script>
-  <script src="js/dashboard.js?v=7"></script>
-  <script src="js/quote.js?v=7"></script>
-  <script src="js/app.js?v=7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/supa.js?v=8"></script>
+  <script src="js/storage.js?v=8"></script>
+  <script src="js/ui.js?v=8"></script>
+  <script src="js/auth.js?v=8"></script>
+  <script src="js/customers.js?v=8"></script>
+  <script src="js/jobs.js?v=8"></script>
+  <script src="js/calendar.js?v=8"></script>
+  <script src="js/companies.js?v=8"></script>
+  <script src="js/dashboard.js?v=8"></script>
+  <script src="js/quote.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
 </body>
 </html>
