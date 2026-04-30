@@ -90,6 +90,26 @@ const UI = (() => {
     return window.confirm(message);
   }
 
+  // Lead source options
+  const LEAD_SOURCES = [
+    { key: '',           label: '— Not specified —' },
+    { key: 'website',    label: 'Website' },
+    { key: 'google',     label: 'Google search' },
+    { key: 'facebook',   label: 'Facebook' },
+    { key: 'instagram',  label: 'Instagram' },
+    { key: 'referral',   label: 'Referral / word of mouth' },
+    { key: 'repeat',     label: 'Repeat customer' },
+    { key: 'leaflet',    label: 'Leaflet / flyer' },
+    { key: 'vehicle',    label: 'Vehicle livery' },
+    { key: 'directory',  label: 'Directory / Yellow Pages' },
+    { key: 'other',      label: 'Other' },
+  ];
+
+  function leadSourceLabel(key) {
+    const s = LEAD_SOURCES.find(l => l.key === key);
+    return s ? s.label : (key || '');
+  }
+
   // Stage definitions used by jobs + dashboard
   const STAGES = [
     { key: 'lead',      label: 'Lead',      dotClass: 'dot-lead',      badgeClass: 'badge-lead' },
@@ -127,5 +147,6 @@ const UI = (() => {
     escapeHtml, formatMoney, formatDate, formatDateShort, todayISO, jobTotal,
     openModal, closeModal, toast, confirm,
     STAGES, stage, badge, icon,
+    LEAD_SOURCES, leadSourceLabel,
   };
 })();

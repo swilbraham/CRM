@@ -1143,7 +1143,26 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .job-card .company-tag {
+  margin: 0;
+}
+
+.job-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 8px;
+}
+
+.source-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
 }
 
 /* ===== Company picker (radio buttons) ===== */
@@ -1263,6 +1282,53 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .company-stats > div { font-size: 14px; }
 .company-stats strong { font-size: 18px; margin-right: 4px; }
+
+.company-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  border: 2px dashed var(--border-strong);
+  background: var(--panel-2);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: border-color 0.15s, background 0.15s, transform 0.05s;
+}
+
+.company-add:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.company-add:active { transform: translateY(1px); }
+
+.company-add-inner {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+}
+
+.company-add-inner svg {
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+}
+
+.company-add-inner strong {
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.company-add-inner span {
+  font-size: 12px;
+  max-width: 220px;
+  line-height: 1.5;
+}
 
 /* ===== Logo upload row ===== */
 .logo-row {

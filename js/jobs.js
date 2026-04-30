@@ -106,9 +106,12 @@ const Jobs = (() => {
     const companyTag = company
       ? `<span class="company-tag" style="background:${company.color}1a;color:${company.color}"><span class="company-dot" style="background:${company.color}"></span>${UI.escapeHtml(company.shortName || company.name)}</span>`
       : '';
+    const sourceTag = job.source
+      ? `<span class="source-tag" title="Lead source">${UI.escapeHtml(UI.leadSourceLabel(job.source))}</span>`
+      : '';
     return `
       <div class="job-card" draggable="true" data-job-id="${job.id}">
-        ${companyTag}
+        <div class="job-card-tags">${companyTag}${sourceTag}</div>
         <div class="job-card-title">${UI.escapeHtml(name)}</div>
         <div class="job-card-sub">${UI.escapeHtml(summary)}</div>
         <div class="job-card-meta">
@@ -235,9 +238,17 @@ const Jobs = (() => {
           </div>
 
           <div id="customer-history"></div>
-          <div class="field">
-            <label class="label">Date</label>
-            <input class="input" type="date" name="date" value="${UI.escapeHtml(j.date || '')}" />
+          <div class="field-row">
+            <div class="field">
+              <label class="label">Date</label>
+              <input class="input" type="date" name="date" value="${UI.escapeHtml(j.date || '')}" />
+            </div>
+            <div class="field">
+              <label class="label">Lead source</label>
+              <select class="select" name="source">
+                ${UI.LEAD_SOURCES.map(s => `<option value="${s.key}" ${(j.source || '') === s.key ? 'selected' : ''}>${UI.escapeHtml(s.label)}</option>`).join('')}
+              </select>
+            </div>
           </div>
 
           <label class="label" style="margin-top: 8px;">Line items</label>
@@ -351,6 +362,7 @@ const Jobs = (() => {
         companyId: fd.get('companyId'),
         status: fd.get('status'),
         date: fd.get('date'),
+        source: fd.get('source') || '',
         notes: fd.get('notes'),
         items: items.slice(),
       };
@@ -448,6 +460,7 @@ const Jobs = (() => {
         companyId: fd.get('companyId'),
         status: newStatus,
         date: fd.get('date'),
+        source: fd.get('source') || '',
         notes: fd.get('notes').trim(),
         items: cleanItems,
       };
