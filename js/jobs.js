@@ -91,8 +91,8 @@ const Jobs = (() => {
 
   function wireFilter() {
     document.querySelectorAll('.pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        Store.setActiveCompanyFilter(btn.dataset.filter);
+      btn.addEventListener('click', async () => {
+        await Store.setActiveCompanyFilter(btn.dataset.filter);
         render();
       });
     });
@@ -144,16 +144,20 @@ const Jobs = (() => {
       zone.addEventListener('dragleave', (e) => {
         if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
       });
-      zone.addEventListener('drop', (e) => {
+      zone.addEventListener('drop', async (e) => {
         e.preventDefault();
         zone.classList.remove('drag-over');
         const jobId = e.dataTransfer.getData('text/plain');
         const newStage = zone.dataset.drop;
         const job = Store.getJob(jobId);
         if (!job || job.status === newStage) return;
-        Store.updateJobStatus(jobId, newStage);
-        UI.toast(`Moved to ${UI.stage(newStage).label}`);
-        render();
+        try {
+          await Store.updateJobStatus(jobId, newStage);
+          UI.toast(`Moved to ${UI.stage(newStage).label}`);
+          render();
+        } catch (err) {
+          UI.toast('Update failed: ' + err.message);
+        }
       });
     });
   }
@@ -445,7 +449,7 @@ const Jobs = (() => {
       renderItems();
     });
 
-    document.getElementById('job-form').addEventListener('submit', (e) => {
+    document.getElementById('job-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const cleanItems = items.filter(it => (it.description || '').trim());
@@ -468,22 +472,30 @@ const Jobs = (() => {
         if (j.invoiceNo) payload.invoiceNo = j.invoiceNo;
         if (j.quoteNo) payload.quoteNo = j.quoteNo;
       }
-      const saved = Store.saveJob(payload);
-      if ((newStatus === 'quoted' && !saved.quoteNo) || (newStatus === 'invoiced' && !saved.invoiceNo)) {
-        Store.updateJobStatus(saved.id, newStatus);
+      try {
+        const saved = await Store.saveJob(payload);
+        if ((newStatus === 'quoted' && !saved.quoteNo) || (newStatus === 'invoiced' && !saved.invoiceNo)) {
+          await Store.updateJobStatus(saved.id, newStatus);
+        }
+        UI.closeModal();
+        UI.toast(isEdit ? 'Job updated' : 'Job created');
+        App.renderCurrent();
+      } catch (err) {
+        UI.toast('Save failed: ' + err.message);
       }
-      UI.closeModal();
-      UI.toast(isEdit ? 'Job updated' : 'Job created');
-      App.renderCurrent();
     });
 
     if (isEdit) {
-      document.getElementById('delete-job').addEventListener('click', () => {
+      document.getElementById('delete-job').addEventListener('click', async () => {
         if (UI.confirm('Delete this job? This cannot be undone.')) {
-          Store.deleteJob(j.id);
-          UI.closeModal();
-          UI.toast('Job deleted');
-          App.renderCurrent();
+          try {
+            await Store.deleteJob(j.id);
+            UI.closeModal();
+            UI.toast('Job deleted');
+            App.renderCurrent();
+          } catch (err) {
+            UI.toast('Delete failed: ' + err.message);
+          }
         }
       });
       document.getElementById('quote-btn').addEventListener('click', () => {

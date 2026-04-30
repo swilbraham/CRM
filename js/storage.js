@@ -1,366 +1,403 @@
-// Local-first persistence layer. Stores customers + jobs in localStorage as JSON.
-// Single source of truth — every page reads through Store.
+// Multi-tenant data layer backed by Supabase + an in-memory cache.
+//
+// Mutations (saveJob, saveCustomer, etc.) are async and write to Supabase, then
+// update the cache. Getters stay synchronous and read from the cache so the UI
+// modules don't have to async/await every render. Call Store.refresh() to hydrate
+// the cache (done on login + after import).
 
 const Store = (() => {
-  const KEYS = {
+  const LEGACY_KEYS = {
     customers: 'crm.customers',
     jobs: 'crm.jobs',
     settings: 'crm.settings',
     companies: 'crm.companies',
   };
 
-  const DEFAULT_COMPANIES = [
-    {
-      id: 'wirral',
-      name: 'Wirral Carpet Cleaning Limited',
-      shortName: 'Wirral',
-      color: '#0ea5e9',
-      logo: '',
-      phone: '',
-      email: '',
-      address: '',
-      vatNumber: '',
-    },
-    {
-      id: 'freshforless',
-      name: 'Fresh For Less Carpet Cleaning',
-      shortName: 'Fresh For Less',
-      color: '#16a34a',
-      logo: '',
-      phone: '',
-      email: '',
-      address: '',
-      vatNumber: '',
-    },
-  ];
+  const PALETTE = ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#0891b2', '#db2777', '#ca8a04'];
 
-  const DEFAULT_SETTINGS = {
-    nextInvoiceNo: 1001,
-    nextQuoteNo: 2001,
-    activeCompanyFilter: 'all',
+  let cache = {
+    companies: [],
+    customers: [],
+    jobs: [],
+    settings: { next_invoice_no: 1001, next_quote_no: 2001, active_company_filter: 'all' },
+    activeFilter: 'all',
   };
-
-  function read(key, fallback) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
-  function write(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-  }
 
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  // --- Companies ---
-  function getCompanies() {
-    let list = read(KEYS.companies, null);
-    if (!list || !Array.isArray(list) || list.length === 0) {
-      // Migrate from legacy single-business settings if present
-      const legacy = read(KEYS.settings, {});
-      if (legacy && legacy.businessName && legacy.businessName !== 'Carpet & Upholstery Cleaning') {
-        list = [{
-          id: 'legacy',
-          name: legacy.businessName,
-          shortName: legacy.businessName.split(' ')[0],
-          color: '#2563eb',
-          logo: '',
-          phone: legacy.businessPhone || '',
-          email: legacy.businessEmail || '',
-          address: legacy.businessAddress || '',
-          vatNumber: legacy.vatNumber || '',
-        }, ...DEFAULT_COMPANIES.slice(1)];
-      } else {
-        list = DEFAULT_COMPANIES.slice();
-      }
-      write(KEYS.companies, list);
-    }
-    return list;
-  }
+  function s() { return Supa.client; }
+  function userId() { return Supa.user()?.id; }
 
-  function getCompany(id) {
-    return getCompanies().find(c => c.id === id);
-  }
+  // ---- Job item shape conversion (DB uses snake_case, app uses camelCase) ----
 
-  function saveCompany(data) {
-    const all = getCompanies();
-    const i = all.findIndex(c => c.id === data.id);
-    if (i >= 0) {
-      all[i] = { ...all[i], ...data };
-    } else {
-      data.id = data.id || uid();
-      all.push(data);
-    }
-    write(KEYS.companies, all);
-    return all[i >= 0 ? i : all.length - 1];
-  }
-
-  // --- Customers ---
-  function getCustomers() {
-    return read(KEYS.customers, []);
-  }
-
-  function getCustomer(id) {
-    return getCustomers().find(c => c.id === id);
-  }
-
-  function saveCustomer(data) {
-    const all = getCustomers();
-    if (data.id) {
-      const i = all.findIndex(c => c.id === data.id);
-      if (i >= 0) all[i] = { ...all[i], ...data, updatedAt: Date.now() };
-    } else {
-      data.id = uid();
-      data.createdAt = Date.now();
-      data.updatedAt = Date.now();
-      all.push(data);
-    }
-    write(KEYS.customers, all);
-    return data;
-  }
-
-  function deleteCustomer(id) {
-    write(KEYS.customers, getCustomers().filter(c => c.id !== id));
-  }
-
-  // --- Jobs ---
-  function getJobs() {
-    return read(KEYS.jobs, []);
-  }
-
-  function getJob(id) {
-    return getJobs().find(j => j.id === id);
-  }
-
-  function getJobsForCustomer(customerId) {
-    return getJobs().filter(j => j.customerId === customerId);
-  }
-
-  function saveJob(data) {
-    const all = getJobs();
-    if (data.id) {
-      const i = all.findIndex(j => j.id === data.id);
-      if (i >= 0) all[i] = { ...all[i], ...data, updatedAt: Date.now() };
-    } else {
-      data.id = uid();
-      data.createdAt = Date.now();
-      data.updatedAt = Date.now();
-      data.status = data.status || 'lead';
-      // Default to first company if not specified
-      if (!data.companyId) {
-        const companies = getCompanies();
-        data.companyId = companies[0] ? companies[0].id : '';
-      }
-      all.push(data);
-    }
-    write(KEYS.jobs, all);
-    return data;
-  }
-
-  function updateJobStatus(id, status) {
-    const all = getJobs();
-    const i = all.findIndex(j => j.id === id);
-    if (i < 0) return null;
-    all[i].status = status;
-    all[i].updatedAt = Date.now();
-    if (status === 'invoiced' && !all[i].invoiceNo) {
-      const settings = getSettings();
-      all[i].invoiceNo = settings.nextInvoiceNo;
-      saveSettings({ ...settings, nextInvoiceNo: settings.nextInvoiceNo + 1 });
-    }
-    if (status === 'quoted' && !all[i].quoteNo) {
-      const settings = getSettings();
-      all[i].quoteNo = settings.nextQuoteNo;
-      saveSettings({ ...settings, nextQuoteNo: settings.nextQuoteNo + 1 });
-    }
-    write(KEYS.jobs, all);
-    return all[i];
-  }
-
-  function deleteJob(id) {
-    write(KEYS.jobs, getJobs().filter(j => j.id !== id));
-  }
-
-  // --- Settings (counters + active filter) ---
-  function getSettings() {
-    return { ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) };
-  }
-
-  function saveSettings(data) {
-    write(KEYS.settings, data);
-    return data;
-  }
-
-  function getActiveCompanyFilter() {
-    return getSettings().activeCompanyFilter || 'all';
-  }
-
-  function setActiveCompanyFilter(id) {
-    const s = getSettings();
-    saveSettings({ ...s, activeCompanyFilter: id });
-  }
-
-  // --- Export / import ---
-  function exportAll() {
+  function jobFromDb(r) {
+    if (!r) return r;
     return {
-      customers: getCustomers(),
-      jobs: getJobs(),
-      settings: getSettings(),
-      companies: getCompanies(),
-      exportedAt: new Date().toISOString(),
-      version: 2,
+      id: r.id,
+      customerId: r.customer_id,
+      companyId: r.company_id,
+      status: r.status,
+      date: r.date || '',
+      source: r.source || '',
+      notes: r.notes || '',
+      items: r.items || [],
+      invoiceNo: r.invoice_no,
+      quoteNo: r.quote_no,
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
     };
   }
 
-  function importAll(payload) {
+  function jobToDb(j) {
+    return {
+      customer_id: j.customerId || null,
+      company_id: j.companyId || null,
+      status: j.status || 'lead',
+      date: j.date || null,
+      source: j.source || null,
+      notes: j.notes || '',
+      items: j.items || [],
+      invoice_no: j.invoiceNo || null,
+      quote_no: j.quoteNo || null,
+    };
+  }
+
+  function companyFromDb(r) {
+    return {
+      id: r.id,
+      name: r.name,
+      shortName: r.short_name || '',
+      color: r.color || '#2563eb',
+      logo: r.logo || '',
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      vatNumber: r.vat_number || '',
+    };
+  }
+
+  function companyToDb(c) {
+    return {
+      name: c.name,
+      short_name: c.shortName || null,
+      color: c.color || null,
+      logo: c.logo || null,
+      phone: c.phone || null,
+      email: c.email || null,
+      address: c.address || null,
+      vat_number: c.vatNumber || null,
+    };
+  }
+
+  function customerFromDb(r) {
+    return {
+      id: r.id,
+      name: r.name,
+      phone: r.phone || '',
+      email: r.email || '',
+      address: r.address || '',
+      city: r.city || '',
+      postcode: r.postcode || '',
+      notes: r.notes || '',
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : Date.now(),
+    };
+  }
+
+  function customerToDb(c) {
+    return {
+      name: c.name,
+      phone: c.phone || null,
+      email: c.email || null,
+      address: c.address || null,
+      city: c.city || null,
+      postcode: c.postcode || null,
+      notes: c.notes || null,
+    };
+  }
+
+  // ---- Cache hydration ----
+
+  async function refresh() {
+    if (!s() || !userId()) return;
+    const [cs, cu, jb, st] = await Promise.all([
+      s().from('companies').select('*').order('created_at'),
+      s().from('customers').select('*').order('created_at'),
+      s().from('jobs').select('*'),
+      s().from('user_settings').select('*').eq('user_id', userId()).maybeSingle(),
+    ]);
+    if (cs.error) console.error('companies', cs.error);
+    if (cu.error) console.error('customers', cu.error);
+    if (jb.error) console.error('jobs', jb.error);
+    if (st.error) console.error('settings', st.error);
+    cache.companies = (cs.data || []).map(companyFromDb);
+    cache.customers = (cu.data || []).map(customerFromDb);
+    cache.jobs = (jb.data || []).map(jobFromDb);
+    if (st.data) {
+      cache.settings = st.data;
+      cache.activeFilter = st.data.active_company_filter || 'all';
+    }
+
+    // First-run: ensure at least one company exists so the kanban + quote view
+    // have something to render against.
+    if (cache.companies.length === 0) {
+      await saveCompany({
+        name: 'My Business',
+        shortName: 'My Biz',
+        color: PALETTE[0],
+      });
+    }
+  }
+
+  function reset() {
+    cache = {
+      companies: [],
+      customers: [],
+      jobs: [],
+      settings: { next_invoice_no: 1001, next_quote_no: 2001, active_company_filter: 'all' },
+      activeFilter: 'all',
+    };
+  }
+
+  // ---- Companies ----
+
+  function getCompanies() { return cache.companies.slice(); }
+  function getCompany(id) { return cache.companies.find(c => c.id === id); }
+
+  async function saveCompany(data) {
+    const payload = companyToDb(data);
+    if (data.id) {
+      const { data: row, error } = await s().from('companies').update(payload).eq('id', data.id).select().single();
+      if (error) throw error;
+      const i = cache.companies.findIndex(c => c.id === data.id);
+      if (i >= 0) cache.companies[i] = companyFromDb(row);
+      return cache.companies[i];
+    }
+    const { data: row, error } = await s().from('companies').insert(payload).select().single();
+    if (error) throw error;
+    const company = companyFromDb(row);
+    cache.companies.push(company);
+    return company;
+  }
+
+  async function deleteCompany(id) {
+    const { error } = await s().from('companies').delete().eq('id', id);
+    if (error) throw error;
+    cache.companies = cache.companies.filter(c => c.id !== id);
+  }
+
+  // ---- Customers ----
+
+  function getCustomers() { return cache.customers.slice(); }
+  function getCustomer(id) { return cache.customers.find(c => c.id === id); }
+
+  async function saveCustomer(data) {
+    const payload = customerToDb(data);
+    if (data.id) {
+      const { data: row, error } = await s().from('customers').update(payload).eq('id', data.id).select().single();
+      if (error) throw error;
+      const i = cache.customers.findIndex(c => c.id === data.id);
+      if (i >= 0) cache.customers[i] = customerFromDb(row);
+      return cache.customers[i];
+    }
+    const { data: row, error } = await s().from('customers').insert(payload).select().single();
+    if (error) throw error;
+    const customer = customerFromDb(row);
+    cache.customers.push(customer);
+    return customer;
+  }
+
+  async function deleteCustomer(id) {
+    const { error } = await s().from('customers').delete().eq('id', id);
+    if (error) throw error;
+    cache.customers = cache.customers.filter(c => c.id !== id);
+  }
+
+  // ---- Jobs ----
+
+  function getJobs() { return cache.jobs.slice(); }
+  function getJob(id) { return cache.jobs.find(j => j.id === id); }
+  function getJobsForCustomer(customerId) { return cache.jobs.filter(j => j.customerId === customerId); }
+
+  async function saveJob(data) {
+    const payload = jobToDb(data);
+    if (data.id) {
+      const { data: row, error } = await s().from('jobs').update(payload).eq('id', data.id).select().single();
+      if (error) throw error;
+      const i = cache.jobs.findIndex(j => j.id === data.id);
+      if (i >= 0) cache.jobs[i] = jobFromDb(row);
+      return cache.jobs[i];
+    }
+    const { data: row, error } = await s().from('jobs').insert(payload).select().single();
+    if (error) throw error;
+    const job = jobFromDb(row);
+    cache.jobs.push(job);
+    return job;
+  }
+
+  async function updateJobStatus(id, status) {
+    const job = getJob(id);
+    if (!job) return null;
+    const update = { status };
+    if (status === 'invoiced' && !job.invoiceNo) {
+      update.invoice_no = cache.settings.next_invoice_no || 1001;
+      cache.settings.next_invoice_no = update.invoice_no + 1;
+      await s().from('user_settings').update({ next_invoice_no: cache.settings.next_invoice_no }).eq('user_id', userId());
+    }
+    if (status === 'quoted' && !job.quoteNo) {
+      update.quote_no = cache.settings.next_quote_no || 2001;
+      cache.settings.next_quote_no = update.quote_no + 1;
+      await s().from('user_settings').update({ next_quote_no: cache.settings.next_quote_no }).eq('user_id', userId());
+    }
+    const { data: row, error } = await s().from('jobs').update(update).eq('id', id).select().single();
+    if (error) throw error;
+    const updated = jobFromDb(row);
+    const i = cache.jobs.findIndex(j => j.id === id);
+    if (i >= 0) cache.jobs[i] = updated;
+    return updated;
+  }
+
+  async function deleteJob(id) {
+    const { error } = await s().from('jobs').delete().eq('id', id);
+    if (error) throw error;
+    cache.jobs = cache.jobs.filter(j => j.id !== id);
+  }
+
+  // ---- Settings / filter ----
+
+  function getSettings() {
+    return {
+      nextInvoiceNo: cache.settings.next_invoice_no || 1001,
+      nextQuoteNo: cache.settings.next_quote_no || 2001,
+      activeCompanyFilter: cache.activeFilter,
+    };
+  }
+
+  function getActiveCompanyFilter() { return cache.activeFilter; }
+
+  async function setActiveCompanyFilter(id) {
+    cache.activeFilter = id;
+    if (userId()) {
+      await s().from('user_settings').update({ active_company_filter: id }).eq('user_id', userId());
+    }
+  }
+
+  // ---- Export / import ----
+
+  function exportAll() {
+    return {
+      companies: cache.companies,
+      customers: cache.customers,
+      jobs: cache.jobs,
+      settings: getSettings(),
+      exportedAt: new Date().toISOString(),
+      version: 3,
+    };
+  }
+
+  async function importAll(payload) {
     if (!payload || typeof payload !== 'object') throw new Error('Invalid file');
-    if (Array.isArray(payload.customers)) write(KEYS.customers, payload.customers);
-    if (Array.isArray(payload.jobs)) write(KEYS.jobs, payload.jobs);
-    if (Array.isArray(payload.companies)) write(KEYS.companies, payload.companies);
-    if (payload.settings) write(KEYS.settings, payload.settings);
+    // Replace strategy: wipe current cloud data, then insert payload.
+    // Done in series because we need new ids and to remap.
+    await s().from('jobs').delete().not('id', 'is', null);
+    await s().from('customers').delete().not('id', 'is', null);
+    await s().from('companies').delete().not('id', 'is', null);
+
+    const companyMap = {};
+    for (const c of (payload.companies || [])) {
+      const saved = await saveCompany({ ...c, id: undefined });
+      companyMap[c.id] = saved.id;
+    }
+    const customerMap = {};
+    for (const c of (payload.customers || [])) {
+      const saved = await saveCustomer({ ...c, id: undefined });
+      customerMap[c.id] = saved.id;
+    }
+    for (const j of (payload.jobs || [])) {
+      await saveJob({
+        ...j,
+        id: undefined,
+        customerId: customerMap[j.customerId] || null,
+        companyId: companyMap[j.companyId] || null,
+      });
+    }
+    await refresh();
   }
 
-  // Backfill companyId on jobs that pre-date multi-company support
-  function migrateJobs() {
-    const jobs = getJobs();
-    const companies = getCompanies();
-    if (companies.length === 0) return;
-    const defaultId = companies[0].id;
-    const fflId = companies.find(c => c.id === 'freshforless')?.id;
-    let changed = false;
-    jobs.forEach((j, idx) => {
-      if (!j.companyId) {
-        // Spread legacy seed data across both companies for a useful demo
-        j.companyId = (fflId && idx % 2 === 1) ? fflId : defaultId;
-        changed = true;
-      }
-    });
-    if (changed) write(KEYS.jobs, jobs);
+  // ---- Detect legacy localStorage data for one-time migration prompt ----
+
+  function legacyDataAvailable() {
+    try {
+      const customers = JSON.parse(localStorage.getItem(LEGACY_KEYS.customers) || '[]');
+      const jobs = JSON.parse(localStorage.getItem(LEGACY_KEYS.jobs) || '[]');
+      return (customers.length + jobs.length) > 0
+        && !localStorage.getItem('crm.legacyImported');
+    } catch { return false; }
   }
 
-  // --- Seed sample data on first run ---
-  function seedIfEmpty() {
-    // Always ensure default companies exist
-    getCompanies();
-    migrateJobs();
+  async function importLegacy() {
+    const customers = JSON.parse(localStorage.getItem(LEGACY_KEYS.customers) || '[]');
+    const jobs = JSON.parse(localStorage.getItem(LEGACY_KEYS.jobs) || '[]');
+    const companies = JSON.parse(localStorage.getItem(LEGACY_KEYS.companies) || '[]');
 
-    if (getCustomers().length > 0 || getJobs().length > 0) return;
+    // Wipe any auto-created starter company so we don't end up with duplicates.
+    await s().from('companies').delete().not('id', 'is', null);
 
-    const companies = getCompanies();
-    const wirralId = companies[0].id;
-    const fflId = companies[1] ? companies[1].id : wirralId;
+    const companyMap = {};
+    for (const c of companies) {
+      const saved = await saveCompany({
+        name: c.name,
+        shortName: c.shortName,
+        color: c.color,
+        logo: c.logo,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+        vatNumber: c.vatNumber,
+      });
+      companyMap[c.id] = saved.id;
+    }
 
-    const c1 = saveCustomer({
-      name: 'Margaret Thompson',
-      phone: '07700 900123',
-      email: 'mthompson@example.co.uk',
-      address: '14 Elm Avenue',
-      city: 'Birkenhead',
-      postcode: 'CH41 5AB',
-      notes: 'Two cats — please use pet-safe products. Side gate code: 4827.',
-    });
+    const customerMap = {};
+    for (const c of customers) {
+      const saved = await saveCustomer({
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        address: c.address,
+        city: c.city,
+        postcode: c.postcode,
+        notes: c.notes,
+      });
+      customerMap[c.id] = saved.id;
+    }
 
-    const c2 = saveCustomer({
-      name: 'James Patel',
-      phone: '07700 900456',
-      email: 'james.patel@example.com',
-      address: '22 Oakwood Drive',
-      city: 'Wallasey',
-      postcode: 'CH44 2XY',
-      notes: 'Wool carpets in lounge — no harsh chemicals.',
-    });
+    for (const j of jobs) {
+      await saveJob({
+        customerId: customerMap[j.customerId] || null,
+        companyId: companyMap[j.companyId] || null,
+        status: j.status || 'lead',
+        date: j.date || null,
+        source: j.source || null,
+        notes: j.notes || '',
+        items: j.items || [],
+      });
+    }
 
-    const c3 = saveCustomer({
-      name: 'Sarah Davies',
-      phone: '07700 900789',
-      email: '',
-      address: '8 Riverside Court',
-      city: 'Heswall',
-      postcode: 'CH60 9PL',
-      notes: '',
-    });
-
-    const today = new Date();
-    const fmt = d => d.toISOString().slice(0, 10);
-    const future = days => { const d = new Date(today); d.setDate(d.getDate() + days); return fmt(d); };
-
-    saveJob({
-      customerId: c1.id,
-      companyId: wirralId,
-      status: 'booked',
-      date: future(3),
-      time: '09:30',
-      items: [
-        { description: 'Lounge carpet (large)', qty: 1, price: 80 },
-        { description: 'Hallway & stairs', qty: 1, price: 65 },
-        { description: '3-seater sofa (fabric)', qty: 1, price: 75 },
-      ],
-      notes: 'Bring spot treatment for red wine stain by hearth.',
-    });
-
-    saveJob({
-      customerId: c2.id,
-      companyId: fflId,
-      status: 'quoted',
-      date: future(7),
-      time: '14:00',
-      items: [
-        { description: 'Lounge wool carpet', qty: 1, price: 95 },
-        { description: 'Master bedroom carpet', qty: 1, price: 55 },
-      ],
-      notes: '',
-    });
-
-    saveJob({
-      customerId: c3.id,
-      companyId: fflId,
-      status: 'lead',
-      date: '',
-      time: '',
-      items: [
-        { description: '2-seater sofa', qty: 1, price: 55 },
-      ],
-      notes: 'Asked for callback Tuesday afternoon.',
-    });
-
-    saveJob({
-      customerId: c1.id,
-      companyId: wirralId,
-      status: 'completed',
-      date: future(-14),
-      time: '10:00',
-      items: [
-        { description: 'Dining room carpet', qty: 1, price: 60 },
-      ],
-      notes: '',
-    });
-
-    saveJob({
-      customerId: c2.id,
-      companyId: wirralId,
-      status: 'invoiced',
-      date: future(-21),
-      time: '11:00',
-      items: [
-        { description: 'Stairs & landing', qty: 1, price: 75 },
-        { description: 'Armchair (fabric)', qty: 2, price: 35 },
-      ],
-      notes: '',
-    });
+    localStorage.setItem('crm.legacyImported', '1');
+    await refresh();
+    return { customers: customers.length, jobs: jobs.length, companies: companies.length };
   }
 
   return {
-    getCompanies, getCompany, saveCompany,
+    refresh, reset, uid,
+    getCompanies, getCompany, saveCompany, deleteCompany,
     getCustomers, getCustomer, saveCustomer, deleteCustomer,
     getJobs, getJob, getJobsForCustomer, saveJob, updateJobStatus, deleteJob,
-    getSettings, saveSettings,
-    getActiveCompanyFilter, setActiveCompanyFilter,
+    getSettings, getActiveCompanyFilter, setActiveCompanyFilter,
     exportAll, importAll,
-    seedIfEmpty, uid,
+    legacyDataAvailable, importLegacy,
   };
 })();

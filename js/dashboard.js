@@ -129,8 +129,8 @@ const Dashboard = (() => {
     `;
 
     page.querySelectorAll('.pill').forEach(btn => {
-      btn.addEventListener('click', () => {
-        Store.setActiveCompanyFilter(btn.dataset.filter);
+      btn.addEventListener('click', async () => {
+        await Store.setActiveCompanyFilter(btn.dataset.filter);
         render();
       });
     });

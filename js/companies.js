@@ -184,38 +184,44 @@ const Companies = (() => {
       removeBtn.style.display = 'none';
     });
 
-    document.getElementById('company-form').addEventListener('submit', (e) => {
+    document.getElementById('company-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const name = fd.get('name').trim();
-      Store.saveCompany({
-        ...(isEdit ? { id: c.id } : {}),
-        name,
-        shortName: fd.get('shortName').trim() || name.split(' ')[0],
-        color: fd.get('color') || c.color,
-        phone: fd.get('phone').trim(),
-        email: fd.get('email').trim(),
-        address: fd.get('address').trim(),
-        vatNumber: fd.get('vatNumber').trim(),
-        logo: pendingLogo,
-      });
-      UI.closeModal();
-      UI.toast(isEdit ? 'Company updated' : 'Company added');
-      render();
+      try {
+        await Store.saveCompany({
+          ...(isEdit ? { id: c.id } : {}),
+          name,
+          shortName: fd.get('shortName').trim() || name.split(' ')[0],
+          color: fd.get('color') || c.color,
+          phone: fd.get('phone').trim(),
+          email: fd.get('email').trim(),
+          address: fd.get('address').trim(),
+          vatNumber: fd.get('vatNumber').trim(),
+          logo: pendingLogo,
+        });
+        UI.closeModal();
+        UI.toast(isEdit ? 'Company updated' : 'Company added');
+        render();
+      } catch (err) {
+        UI.toast('Save failed: ' + err.message);
+      }
     });
 
     if (isEdit) {
       const delBtn = document.getElementById('delete-company');
       if (delBtn && !delBtn.disabled) {
-        delBtn.addEventListener('click', () => {
+        delBtn.addEventListener('click', async () => {
           if (UI.confirm(`Delete ${c.name}? This cannot be undone.`)) {
-            const all = Store.getCompanies().filter(co => co.id !== c.id);
-            localStorage.setItem('crm.companies', JSON.stringify(all));
-            // If the active filter was this company, reset it
-            if (Store.getActiveCompanyFilter() === c.id) Store.setActiveCompanyFilter('all');
-            UI.closeModal();
-            UI.toast('Company deleted');
-            render();
+            try {
+              await Store.deleteCompany(c.id);
+              if (Store.getActiveCompanyFilter() === c.id) await Store.setActiveCompanyFilter('all');
+              UI.closeModal();
+              UI.toast('Company deleted');
+              render();
+            } catch (err) {
+              UI.toast('Delete failed: ' + err.message);
+            }
           }
         });
       }

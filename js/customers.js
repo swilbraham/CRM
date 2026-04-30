@@ -146,7 +146,7 @@ const Customers = (() => {
     `);
 
     const form = document.getElementById('customer-form');
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(form);
       const payload = {
@@ -159,13 +159,13 @@ const Customers = (() => {
         postcode: fd.get('postcode').trim(),
         notes: fd.get('notes').trim(),
       };
-      const saved = Store.saveCustomer(payload);
-      UI.closeModal();
-      UI.toast(isEdit ? 'Customer updated' : 'Customer added');
-      if (onSave) {
-        onSave(saved);
-      } else {
-        render();
+      try {
+        const saved = await Store.saveCustomer(payload);
+        UI.closeModal();
+        UI.toast(isEdit ? 'Customer updated' : 'Customer added');
+        if (onSave) onSave(saved); else render();
+      } catch (err) {
+        UI.toast('Save failed: ' + err.message);
       }
     });
 
@@ -176,12 +176,16 @@ const Customers = (() => {
     }
 
     if (isEdit) {
-      document.getElementById('delete-customer').addEventListener('click', () => {
+      document.getElementById('delete-customer').addEventListener('click', async () => {
         if (UI.confirm(`Delete ${c.name}? Their job history will be kept but unlinked.`)) {
-          Store.deleteCustomer(c.id);
-          UI.closeModal();
-          UI.toast('Customer deleted');
-          if (onSave) onSave(null); else render();
+          try {
+            await Store.deleteCustomer(c.id);
+            UI.closeModal();
+            UI.toast('Customer deleted');
+            if (onSave) onSave(null); else render();
+          } catch (err) {
+            UI.toast('Delete failed: ' + err.message);
+          }
         }
       });
     }
