@@ -27,8 +27,25 @@ const Jobs = (() => {
       });
     });
 
+    const stageTotals = {};
+    UI.STAGES.forEach(s => {
+      stageTotals[s.key] = byStage[s.key].reduce((sum, j) => sum + UI.jobTotal(j), 0);
+    });
+    const grandTotal = Object.values(stageTotals).reduce((a, b) => a + b, 0);
+    const grandCount = jobs.length;
+
     page.innerHTML = `
       ${renderFilter(companies, filter, allJobs)}
+      <div class="kanban-summary">
+        <div>
+          <span class="kanban-summary-label">Showing</span>
+          <strong>${grandCount}</strong> job${grandCount === 1 ? '' : 's'}
+        </div>
+        <div>
+          <span class="kanban-summary-label">Pipeline value</span>
+          <strong>${UI.formatMoney(grandTotal)}</strong>
+        </div>
+      </div>
       <div class="kanban">
         ${UI.STAGES.map(s => `
           <div class="column" data-stage="${s.key}">
@@ -39,6 +56,7 @@ const Jobs = (() => {
               </div>
               <span class="column-count">${byStage[s.key].length}</span>
             </div>
+            <div class="column-total">${UI.formatMoney(stageTotals[s.key])}</div>
             <div class="column-body" data-drop="${s.key}">
               ${byStage[s.key].map(j => renderCard(j, customerById[j.customerId], companyById[j.companyId])).join('')}
             </div>
