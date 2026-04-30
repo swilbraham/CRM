@@ -39,13 +39,16 @@ const App = (() => {
       el.addEventListener('click', () => go(el.dataset.route));
     });
 
-    document.getElementById('signout-btn').addEventListener('click', async () => {
+    const signOut = async () => {
       if (!confirm('Sign out of this account?')) return;
       await Supa.signOut();
       Store.reset();
       booted = false;
       Auth.showOverlay();
-    });
+    };
+    document.getElementById('signout-btn').addEventListener('click', signOut);
+    const mobileSignout = document.getElementById('mobile-signout');
+    if (mobileSignout) mobileSignout.addEventListener('click', signOut);
 
     document.getElementById('export-btn').addEventListener('click', () => {
       const data = Store.exportAll();
